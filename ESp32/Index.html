@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Điều Khiển Hệ Thống ESP32</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .container { width: 80%; margin: 0 auto; }
+        table { width: 100%; margin-top: 20px; border-collapse: collapse; }
+        table, th, td { border: 1px solid #ddd; }
+        th, td { padding: 8px; text-align: center; }
+        button { padding: 10px 20px; margin-top: 20px; cursor: pointer; }
+        footer { margin-top: 20px; text-align: center; font-style: italic; }
+        .time { font-weight: bold; font-size: 18px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Điều Khiển Hệ Thống ESP32</h1>
+        
+        <!-- Hiển thị số người trong phòng -->
+        <h2>Số người trong phòng: <span id="peopleCount">0</span></h2>
+
+        <!-- Form nhập thông tin người dùng -->
+        <h3>Nhập Thông Tin Người Dùng</h3>
+        <input type="text" id="userID" placeholder="Mã số hoặc tên người dùng" required>
+        <input type="text" id="fingerprint" placeholder="ID Vân Tay" required>
+        <input type="number" id="peopleCountInput" placeholder="Số Người" required>
+        <button onclick="sendUserData()">Gửi</button>
+
+        <!-- Hiển thị nhiệt độ phòng -->
+        <h3>Nhiệt độ phòng: <span id="temperatureC">0°C</span> / <span id="temperatureF">32°F</span></h3>
+
+        <!-- Quét RFID để ra khỏi phòng -->
+        <h3>Quét RFID để ra khỏi phòng:</h3>
+        <button onclick="scanRFID()">Quét RFID</button>
+
+        <!-- Điều khiển đèn -->
+        <h3>Điều Khiển Đèn:</h3>
+        <button id="lightButton" onclick="toggleLight()">Bật Đèn</button>
+
+        <!-- Hiển thị nhật ký -->
+        <h3>Nhật Ký:</h3>
+        <table id="logTable">
+            <tr><th>Thời Gian</th><th>Hành Động</th><th>Chi Tiết</th></tr>
+        </table>
+
+        <button onclick="updateTime()">Cập Nhật Thời Gian</button>
+
+        <!-- Hiển thị thời gian hiện tại -->
+        <div class="time" id="currentTime"></div>
+
+        <!-- Tải lên firmware -->
+        <h3>Tải lên Firmware</h3>
+        <form id="firmwareForm" enctype="multipart/form-data">
+            <label for="file">Chọn file firmware (.bin):</label>
+            <input type="file" id="file" name="file" accept=".bin" required><br><br>
+            <button type="button" onclick="uploadFirmware()">Tải lên</button>
+        </form>
+    </div>
+
+    <footer>
+        <p>Design by Trieu</p>
+    </footer>
+
+    <script>
+        let lightStatus = false;  // Trạng thái đèn, false = tắt, true = bật
+
+        // Lấy dữ liệu từ ESP32
+        function fetchData() {
+            fetch('http://<ESP32_IP>/data')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('peopleCount').textContent = data.peopleCount;
+                    document.getElementById('temperatureC').textContent = data.temperatureC + "°C";
+                    document.getElementById('temperatureF').textContent = data.temperatureF + "°F";
+                });
+        }
+
+        // Cập nhật nhiệt độ và số lượng người
+        function updateTemperature() {
+            fetch('http://<ESP32_IP>/data')  // Đảm bảo thay thế <ESP32_IP> bằng địa chỉ IP của ESP32
+                .then(response => response.json())
+                .then(data => {
+                    // Cập nhật nhiệt độ phòng
+                    document.getElementById('temperatureC').innerText = data.temperatureC + "°C";
+                    document.getElementById('temperatureF').innerText = data.temperatureF + "°F";
+
+                    // Cập nhật số lượng người trong phòng
+                    document.getElementById('peopleCount').innerText = data.peopleCount;
+                })
+                .catch(error => {
+                    console.error('Error fetching data:', error);
+                });
+        }
+
+        // Gửi thông tin người dùng lên ESP32
+        function sendUserData() {
+            const userID = document.getElementById('userID').value;
+            const fingerprint = document.getElementById('fingerprint').value;
+            const peopleCount = document.getElementById('peopleCountInput').value;
+
+            fetch('http://<ESP32_IP>/userData', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ userID: userID, fingerprint: fingerprint, peopleCount: peopleCount })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Cửa đã mở và đèn đã bật!');
+                } else {
+                    alert('Không tìm thấy người dùng!');
+                }
+            });
+        }
+
+        // Quét RFID
+        function scanRFID() {
+            fetch('http://<ESP32_IP>/rfid')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('RFID quét thành công. Cửa đã mở.');
+                    }
+                });
+        }
+
+        // Bật/tắt đèn
+        function toggleLight() {
+            lightStatus = !lightStatus;  // Đổi trạng thái đèn
+
+            // Cập nhật nút hiển thị trạng thái đèn
+            document.getElementById('lightButton').textContent = lightStatus ? "Tắt Đèn" : "Bật Đèn";
+
+            // Gửi yêu cầu bật/tắt đèn tới ESP32
+            fetch('http://<ESP32_IP>/light', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ lightStatus: lightStatus })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('Trạng thái đèn đã được cập nhật!');
+                }
+            });
+        }
+
+        // Cập nhật thời gian
+        function updateTime() {
+            fetch('http://<ESP32_IP>/time')
+                .then(response => response.json())
+                .then(data => {
+                    let newRow = document.createElement("tr");
+                    newRow.innerHTML = `<td>${data.time}</td><td>${data.action}</td><td>${data.details}</td>`;
+                    document.getElementById('logTable').appendChild(newRow);
+                });
+        }
+
+        // Hiển thị thời gian hiện tại
+        function displayCurrentTime() {
+            const now = new Date();
+            const currentTime = now.toLocaleString('vi-VN');
+            document.getElementById('currentTime').textContent = "Thời gian hiện tại: " + currentTime;
+        }
+
+        // Tải lên firmware
+        function uploadFirmware() {
+            const formData = new FormData(document.getElementById('firmwareForm'));
+
+            fetch('http://<ESP32_IP>/update', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(data => {
+                alert(data);
+            })
+            .catch(error => {
+                alert('Lỗi khi tải lên firmware: ' + error);
+            });
+        }
+
+        // Làm mới dữ liệu mỗi 5 giây
+        setInterval(updateTemperature, 5000);  // Cập nhật nhiệt độ và số người mỗi 5 giây
+        // Cập nhật thời gian mỗi giây
+        setInterval(displayCurrentTime, 1000);
+    </script>
+</body>
+</html>
